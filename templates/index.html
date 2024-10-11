@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulador de Investimentos</title>
+    <style>
+        /* Estilos omitidos para brevidade... */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"],
+        input[type="number"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 15px;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #218838;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+        }
+        tr:hover {
+            background-color: #f1f1f1;
+        }
+        #price {
+            font-size: 1.2em;
+            margin-top: 10px;
+            color: #007bff;
+        }
+        .portfolio {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 5px;
+        }
+    </style>
+    <script>
+        let portfolio = {};  // Armazena o portfólio do usuário
+
+        async function getStockPrice() {
+            const symbol = document.getElementById('symbol').value;
+            const response = await fetch('/get_stock', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `symbol=${symbol}`
+            });
+            const data = await response.json();
+            if (data.price) {
+                document.getElementById('price').innerText = `Preço Atual: $${data.price}`;
+                document.getElementById('buy-section').style.display = 'block';
+                document.getElementById('sell-section').style.display = 'block';
+                document.getElementById('current-price').value = data.price;
+                updatePortfolioDisplay();  // Atualiza a exibição do portfólio
+            } else {
+                alert('Erro ao buscar preço da ação');
+            }
+        }
+
+        async function buyStock() {
+            const symbol = document.getElementById('symbol').value;
+            const quantity = document.getElementById('quantity').value;
+            const price = document.getElementById('current-price').value;
+
+            const response = await fetch('/buy_stock', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `symbol=${symbol}&quantity=${quantity}&price=${price}`
+            });
+            const data = await response.json();
+            alert(data.message);
+            updatePortfolio();  // Atualiza o portfólio após a compra
+            loadTransactions();  // Recarregar transações após a compra
+        }
+
+        async function sellStock() {
+            const symbol = document.getElementById('symbol').value;
+            const quantity = document.getElementById('sell-quantity').value;
+            const price = document.getElementById('current-price').value;
+
+            const response = await fetch('/sell_stock', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `symbol=${symbol}&quantity=${quantity}&price=${price}`
+            });
+            const data = await response.json();
+            if (data.error) {
+                alert(data.error);
+            } else {
+                alert(data.message);
+                updatePortfolio();  // Atualiza o portfólio após a venda
+                loadTransactions();  // Recarregar transações após a venda
+            }
+        }
+
+        async function loadTransactions() {
+            const response = await fetch('/transactions');
+            const transactions = await response.json();
+
+            const tableBody = document.getElementById('transactions-body');
+            tableBody.innerHTML = ''; // Limpa a tabela antes de preenchê-la
+
+            transactions.forEach(transaction => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${transaction.symbol}</td>
+                    <td>${transaction.quantity}</td>
+                    <td>${transaction.price}</td>
+                    <td>${transaction.type}</td>
+                    <td>${new Date(transaction.date).toLocaleString()}</td>
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        async function updatePortfolio() {
+            const response = await fetch('/portfolio');
+            portfolio = await response.json();
+            updatePortfolioDisplay();
+        }
+
+        function updatePortfolioDisplay() {
+            const portfolioDiv = document.getElementById('portfolio');
+            portfolioDiv.innerHTML = '<h3>Seu Portfólio</h3>';
+            if (Object.keys(portfolio).length === 0) {
+                portfolioDiv.innerHTML += '<p>Nenhuma ação comprada ainda.</p>';
+            } else {
+                for (const symbol in portfolio) {
+                    const stock = portfolio[symbol];
+                    portfolioDiv.innerHTML += `
+                        <p>${symbol}: ${stock.quantity} ações | Preço Médio: $${(stock.total_cost / stock.quantity).toFixed(2)}</p>
+                    `;
+                }
+            }
+        }
+
+        // Carrega as transações e o portfólio ao iniciar a página
+        window.onload = function() {
+            loadTransactions();
+            updatePortfolio(); // Atualiza a exibição do portfólio
+        }
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>Simulador de Investimentos</h1>
+
+        <div class="form-group">
+            <label for="symbol">Símbolo da Ação:</label>
+            <input type="text" id="symbol" name="symbol" required>
+            <button onclick="getStockPrice()">Buscar Preço</button>
+        </div>
+
+        <p id="price"></p>
+
+        <!-- Seção de Compra -->
+        <div id="buy-section" style="display:none;">
+            <h3>Comprar Ação</h3>
+            <input type="hidden" id="current-price">
+            <div class="form-group">
+                <label for="quantity">Quantidade:</label>
+                <input type="number" id="quantity" name="quantity" min="1" required>
+                <button onclick="buyStock()">Comprar</button>
+            </div>
+        </div>
+
+        <!-- Seção de Venda -->
+        <div id="sell-section" style="display:none;">
+            <h3>Vender Ação</h3>
+            <div class="form-group">
+                <label for="sell-quantity">Quantidade:</label>
+                <input type="number" id="sell-quantity" name="sell-quantity" min="1" required>
+                <button onclick="sellStock()">Vender</button>
+            </div>
+        </div>
+
+        <!-- Seção de Portfólio -->
+        <div id="portfolio" class="portfolio">
+            <h3>Seu Portfólio</h3>
+            <p>Nenhuma ação comprada ainda.</p>
+        </div>
+
+        <!-- Seção de Histórico de Transações -->
+        <h2>Histórico de Transações</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Símbolo</th>
+                    <th>Quantidade</th>
+                    <th>Preço</th>
+                    <th>Tipo</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+            <tbody id="transactions-body">
+                <!-- As transações serão preenchidas aqui pelo JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
