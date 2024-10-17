@@ -4,24 +4,21 @@ import datetime
 
 app = Flask(__name__)
 
-# Chave da API Alpha Vantage
-ALPHA_VANTAGE_API_KEY = 'W9FV8FI10UCWJ7QC'
-
 # Lista para armazenar as transações e o portfólio
 transactions = []
 portfolio = {}
 
-# Função para buscar o preço atual de uma ação
+# Função para buscar o preço atual de uma ação usando a API Brapi
 def get_stock_price(symbol):
-    url = f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={ALPHA_VANTAGE_API_KEY}'
+    url = f'https://brapi.dev/api/quote/{symbol}?token=7c6tLDYzAqbUp8k3MBhCzx' 
     response = requests.get(url)
     data = response.json()
-    time_series = data.get('Time Series (5min)', {})
-    
-    if time_series:
-        latest_time = list(time_series.keys())[0]
-        latest_data = time_series[latest_time]
-        return float(latest_data['4. close']), latest_time
+
+    if 'results' in data and data['results']:
+        result = data['results'][0]
+        price = result['regularMarketPrice']
+        date = result['regularMarketTime']
+        return price, date
     return None, None
 
 # Rota para a página inicial
@@ -79,20 +76,16 @@ def sell_stock():
     
     # Verificar se o usuário tem ações suficientes para vender
     if symbol in portfolio and portfolio[symbol]['quantity'] >= quantity:
-        # Calculando lucro ou prejuízo
         avg_buy_price = portfolio[symbol]['avg_buy_price']
         total_cost = portfolio[symbol]['total_cost']
         profit_loss = (sell_price - avg_buy_price) * quantity
         
-        # Atualizando o portfólio
         portfolio[symbol]['quantity'] -= quantity
         portfolio[symbol]['total_cost'] -= avg_buy_price * quantity
         
-        # Remover a ação do portfólio se a quantidade for zero
         if portfolio[symbol]['quantity'] == 0:
             del portfolio[symbol]
 
-        # Registrar a transação de venda
         transaction = {
             'symbol': symbol,
             'quantity': quantity,
@@ -104,19 +97,46 @@ def sell_stock():
         
         transactions.append(transaction)
         
-        return jsonify({'message': f'Venda simulada realizada com sucesso. Lucro/Prejuízo: ${profit_loss:.2f}', 'portfolio': portfolio})
+        return jsonify({'message': f'Venda simulada realizada com sucesso. Lucro/Prejuízo: R${profit_loss:.2f}', 'portfolio': portfolio})
     else:
         return jsonify({'error': 'Você não tem ações suficientes para vender'}), 400
 
 # Rota para obter o histórico de transações
 @app.route('/transactions', methods=['GET'])
 def get_transactions():
-    return jsonify(transactions)  # Retorna a lista de transações em formato JSON
+    return jsonify(transactions)
 
 # Rota para obter o portfólio
 @app.route('/portfolio', methods=['GET'])
 def get_portfolio():
-    return jsonify(portfolio)  # Retorna o portfólio em formato JSON
+    return jsonify(portfolio)
+
+# Função para buscar o histórico de preços de uma ação usando a API Brapi
+def get_stock_history(symbol):
+    url = f'https://brapi.dev/api/quote/{symbol}?range=1mo&interval=1d&token=7c6tLDYzAqbUp8k3MBhCzx'
+    response = requests.get(url)
+    data = response.json()
+
+    if 'results' in data and data['results']:
+        result = data['results'][0]
+        if 'historicalDataPrice' in result:
+            history = result['historicalDataPrice']
+            return history
+    return None
+
+
+# Rota para obter o histórico de uma ação
+@app.route('/get_stock_history', methods=['POST'])
+def get_stock_history_route():
+    symbol = request.form.get('symbol')
+    history = get_stock_history(symbol)
+    
+    if history:
+        dates = [item['date'] for item in history]
+        prices = [item['close'] for item in history]
+        return jsonify({'dates': dates, 'prices': prices})
+    else:
+        return jsonify({'error': 'Erro ao buscar histórico da ação'}), 400
 
 if __name__ == '__main__':
     app.run(debug=True)
