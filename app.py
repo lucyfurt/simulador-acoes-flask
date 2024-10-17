@@ -26,6 +26,17 @@ def get_stock_price(symbol):
 def index():
     return render_template('index.html')
 
+# Rota para login
+@app.route('/login')
+def login():
+    return render_template('login.html')
+
+# Rota para register
+@app.route('/register')
+def register():
+    return render_template('register.html')
+
+
 # Rota para buscar preço de ação
 @app.route('/get_stock', methods=['POST'])
 def get_stock():
